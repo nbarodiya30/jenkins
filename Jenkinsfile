@@ -6,15 +6,15 @@ def COLOR_MAP = [
 pipeline {
   agent any
   environment {
-    APP_NAME = 'rakbank-customer-service'
-    DEPLOYMENT_NAME = 'rakdev-customer'
+    APP_NAME = 'appname'
+    DEPLOYMENT_NAME = 'deployment name'
     DOCKER_REPO_NAME = 'customer-service'
     DEPLOYMENT_FILE = 'Dev/frute-deploy-rak-customer-dev.yaml'
-    DOCKER_REPO_URL = '772825290081.dkr.ecr.ap-southeast-1.amazonaws.com'
+    DOCKER_REPO_URL = 'ecr url'
     DOCKER_REPO_CREDENTIALS = 'ecr:ap-southeast-1:jenkins-user'
     DEPLOYMENT_FILES_DIRECTORY = "${WORKSPACE}/deployment_configs/"
     DEPLOYMENT_FILES_GIT_BRANCH = 'jenkins_configurations'
-    GIT_BRANCH_NAME = 'rakBank_dev'
+    GIT_BRANCH_NAME = 'branchname'
     CLUSTER_NAMESPACE = 'Jenkins'
   }
 
@@ -116,7 +116,7 @@ pipeline {
 
         dir(env.DEPLOYMENT_FILES_DIRECTORY) {
           git branch: env.DEPLOYMENT_FILES_GIT_BRANCH,
-            url: 'git@bitbucket.org:bambudeveloper/rakbank-frute-backend-setup.git',
+            url: 'git url',
             credentialsId: env.GIT_CREDENTIALS
         }
       }
@@ -156,7 +156,7 @@ pipeline {
       steps {
         // Updating KUBECONFIG, setting namespace and applying deployment YAML file
         sh '''
-          aws eks --region ap-southeast-1 update-kubeconfig --name frute-backend
+          aws eks --region ap-southeast-1 update-kubeconfig --name eksname
           kubectl config set-context --current --namespace=${CLUSTER_NAMESPACE}
           kubectl apply -f ${DEPLOYMENT_FILES_DIRECTORY}${DEPLOYMENT_FILE}
 
