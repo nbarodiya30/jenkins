@@ -1,0 +1,52 @@
+Jenkins configurations:
+1. Create SSH key pair (ssh-keygen) on the pod / instance which will run Jenkins
+2. Ensure that pod / instance already has AWS CLI, Git, kubectl, JDK, Docker installed. Install in the pod/ instance if not present.
+3. Install Jenkins on the pod / instance
+4. Enter admin password and install default plugins
+5. Log in to Jenkins with your newly created admin credentials
+6. Install additional plugins:
+- Publish over SSH
+- Docker pipeline
+- Git
+- Docker
+- Kubernetes
+- Slack Notification
+- Office 365 Connector
+- Role-based Authorization Strategy
+- Authorize Project
+- Amazon ECR
+7. Configure Jenkins security settings
+- "Manage Jenkins" -> "Configure Global Security" -> "CSRF Protection" -> "Enable proxy compatibility"
+8. Configure Jenkins tools
+- "Manage Jenkins" -> "Global Tool Configuration"
+- Configure JDK, Git, Docker
+- If Jenkins on K8s pod, find locations of these on node on which the pod is running (Make sure that you have already bound binary and socket of Docker in pod to that of node)
+- If Jenkins on EC2 instance, find locations of these on the instance
+9. Configure Git
+- Create webhook in Git repo settings to Jenkins public URL eg: https://jenkins.example.com:8080/bitbucket-webhook/
+- Add Public key in your Git account (Bitbucket/GitHub account settings -> SSH and GPG keys)
+cat /root/.ssh/id_rsa.pub
+- In Jenkins, add credentials - "Manage Jenkins" -> "Manage Credentials" -> "global" -> "Add Credential" -> "SSH Username with Key" -> Paste Private Key along with your git username
+cat /root/.ssh/id_rsa
+- Add this credential ID as a global environment variable in Jenkins:
+"Manage Jenkins" -> "Configure System" -> "Global properties" -> Check "Environment variables" -> "Add" -> Name: GIT_CREDENTIALS, Value: <id-in-jenkins-global-credentials>
+- You can now use SSH for git pull, checkout etc. (in case of private repository)
+10. Create AWS IAM user with below permissions:
+- View-Manage-Kube (custom policy)
+- AmazonEKSClusterPolicy
+- AmazonEKSWorkerNodePolicy
+- AmazonEC2ContainerRegistryFullAccess
+- AmazonEC2ContainerServiceAutoscaleRole
+- AmazonEKSServicePolicy
+- EC2InstanceProfileForImageBuilderECRContainerBuilds
+11. Add AWS credentials in Jenkins
+- "Manage Jenkins" -> "Manage Credentials" -> "global" -> "Add Credential" -> "AWS Credentials" -> Enter access key and secret access key of jenkins-user
+12. Create Pipeline
+- "New Item" -> "Pipeline" -> Enter name (frute-backend-test)
+- Paste the Jenkinsfile
+- "Apply" -> "Save"
+13. Connect to MS Teams
+- Go to the channel you want build information to get triggered in
+- Hamburger / three dots menu "More options" -> "Connectors" -> Search for Jenkins -> Configure accordingly
+- Add the MS Teams Webhook URL obtained as a global environment variable in Jenkins:
+"Manage Jenkins" -> "Configure System" -> "Global properties" -> Check "Environment variables" -> "Add" -> Name: MS_TEAMS_WEBHOOK_URL, Value: <webhook-url>
