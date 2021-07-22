@@ -1,0 +1,24 @@
+#Pull from QA
+git checkout branch_name
+git pull origin branch_name
+
+#Merge into prod
+git checkout prodbranch_name
+git pull origin prodbranch_name
+git log prodbranch_name..branch_name
+git merge --no-ff branch_name
+git log prodbranch_name..branch_name
+
+#HOLD ON, DOUBLE CHECK BEFORE COMMITTING TO PROD
+git push origin prodbranch_name
+
+#Update git tag
+git pull origin prodbranch_name
+git push origin :refs/tags/tagname_v1.14
+git tag -f tagname_v1.14
+git push origin tagname_v1.14
+
+awslogin ecr
+docker pull url_name
+docker tag url_name newtag_url_name
+docker push newtag_url_name
