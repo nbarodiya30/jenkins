@@ -1,0 +1,190 @@
+def COLOR_MAP = [
+    'SUCCESS': 'good',
+    'FAILURE': 'danger',
+]
+
+pipeline {
+  agent any
+  parameters {
+    // For choosing which microservice to deploy
+    choice(
+      name: 'SERVICE_NAME',
+      choices: [
+        'customer',
+        'admin',
+        'gateway'
+      ],
+      description: 'Name of service to deploy'
+    )
+
+    // For choosing the Git branch of that microservice to deploy
+    choice(
+      name: 'GIT_BRANCH_NAME',
+      choices: ['Bank_qa', 'Bank_dev'],
+      description: 'Name of Git branch to pull from'
+    )
+  }
+
+  environment {
+    DOCKER_REPO_URL = 'xxxxx.dkr.ecr.ap-southeast-1.amazonaws.com'
+    DOCKER_REPO_CREDENTIALS = 'ecr:ap-southeast-1:jenkins-user'
+    DEPLOYMENT_FILES_DIRECTORY = "${WORKSPACE}/deployment_configs/"
+    CLUSTER_NAMESPACE = 'jenkins'
+  }
+
+  options {
+    // Keep only the last 20 builds
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+
+    // Timeout of 1 hour for entire build
+    timeout(time: 1, unit: 'HOURS')
+
+    disableConcurrentBuilds()
+  }
+
+  stages {
+    stage('Initialization') {
+      steps {
+        script {
+          // Defining environment variables based upon microservice
+          switch (params.SERVICE_NAME) {
+            case 'customer' :
+              env.APP_NAME = 'bank-customer-service'
+              env.DEPLOYMENT_FILE_NAME = 'frute-deploy-customer'
+              break
+            case 'admin' :
+              env.APP_NAME = 'admin-service'
+              env.DEPLOYMENT_FILE_NAME = 'frute-deploy-admin'
+              break
+          }
+
+          // Defining environment variables based upon Git branch
+          switch (params.GIT_BRANCH_NAME) {
+            case 'Bank_dev' :
+              env.DOCKER_REPO_NAME = "${APP_NAME}-jenkins"
+              env.DEPLOYMENT_FILE_NAME = "${DEPLOYMENT_FILE_NAME}-dev.yaml"
+              break
+            case 'Bank_qa' :
+              env.DOCKER_REPO_NAME = "${APP_NAME}-jenkins-qa"
+              env.DEPLOYMENT_FILE_NAME = "${DEPLOYMENT_FILE_NAME}-qa.yaml"
+              break
+          }
+
+          // Fetch current tag from ECR and compute new tag name
+          env.DOCKER_IMAGE_TAG = sh (
+              script: '''
+                # Fetching current tag from ECR
+                CURRENT_TAG=$(aws ecr describe-images \
+                --repository-name ${DOCKER_REPO_NAME} \
+                --output text \
+                --query 'sort_by(imageDetails,& imagePushedAt)[*].imageTags[*]' \
+                | tr '\t' '\n' \
+                | tail -1)
+
+                # Fetching correct current tag from ECR if "latest"
+                if [ "$CURRENT_TAG" = "latest" ]
+                    then
+                        CURRENT_TAG=$(aws ecr describe-images \
+                        --repository-name ${DOCKER_REPO_NAME} \
+                        --output text \
+                        --query 'sort_by(imageDetails,& imagePushedAt)[*].imageTags[*]' \
+                        | tr '\t' '\n' \
+                        | tail -n 2  \
+                        | head -n 1)
+                fi
+
+                # Extracting only the last point release number
+                ID=${CURRENT_TAG##*.}
+
+                # Incrementing by 1
+                NEW_ID=$((ID+1))
+
+                # Computing NEW_TAG by appending NEW_ID to "v1.2"
+                NEW_TAG=${CURRENT_TAG%.*}.$NEW_ID
+                echo $NEW_TAG
+              ''',
+              returnStdout: true
+          ).trim()
+          echo "New tag for repo ${DOCKER_REPO_NAME} is: ${DOCKER_IMAGE_TAG}"
+        }
+      }
+    }
+
+    stage('Git') {
+      steps {
+        echo "App name is ${APP_NAME}"
+        git branch: params.GIT_BRANCH_NAME,
+          url: "git@bitbucket.org:bambudeveloper/${APP_NAME}.git",
+          credentialsId: env.GIT_CREDENTIALS
+
+        dir(env.DEPLOYMENT_FILES_DIRECTORY) {
+          git url: 'git@github.com:tanmay-pnaik/frute-backend-deployment-files.git',
+            credentialsId: env.GIT_CREDENTIALS
+        }
+      }
+    }
+
+    stage('Docker build') {
+      steps {
+        script {
+          // --network=host lets Docker know that it can use host network
+          sh "docker build --network=host -t ${DOCKER_REPO_NAME} ."
+        }
+      }
+    }
+    stage('Docker push') {
+      steps {
+        script {
+          echo "Tagging image of ${DOCKER_REPO_NAME} as ${env.DOCKER_IMAGE_TAG}"
+          echo "Workspace is ${WORKSPACE}"
+          // Pushing to AWS ECR Docker registry
+          docker.withRegistry('https://${DOCKER_REPO_URL}', env.DOCKER_REPO_CREDENTIALS) {
+            // Choosing the image and the registry
+            def dockerImage = docker.image(env.DOCKER_REPO_NAME)
+
+            // Tagging with custom tag number (sent as build parameter)
+            dockerImage.push(env.DOCKER_IMAGE_TAG)
+
+            // Tagging as 'latest'
+            dockerImage.push('latest')
+          }
+        }
+      }
+    }
+    stage ('Deploy') {
+      steps {
+        // Updating KUBECONFIG, setting namespace and applying deployment YAML file
+        sh '''
+          aws eks --region ap-southeast-1 update-kubeconfig --name clustername
+          kubectl config set-context --current --namespace=${CLUSTER_NAMESPACE}
+          kubectl apply -f ${DEPLOYMENT_FILES_DIRECTORY}${DEPLOYMENT_FILE_NAME}
+        '''
+      }
+    }
+    stage('Cleanup') {
+      steps {
+        // Deleting locally stored Docker images
+        sh '''
+          docker rmi ${DOCKER_REPO_URL}/${DOCKER_REPO_NAME}:${DOCKER_IMAGE_TAG}
+          docker rmi ${DOCKER_REPO_URL}/${DOCKER_REPO_NAME}:latest
+        '''
+      }
+    }
+  }
+  post {
+    always {
+        // Sending notification to MS Teams
+        office365ConnectorSend (
+          // MS_TEAMS_WEBHOOK_URL is a Jenkins global environment variable
+          webhookUrl: env.MS_TEAMS_WEBHOOK_URL,
+          color: COLOR_MAP[currentBuild.currentResult],
+          message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}<br />" +
+                  "SERVICE: ${APP_NAME}<br />" +
+                  "TAG NAME:${DOCKER_IMAGE_TAG}<br />" +
+                  "NAMESPACE: ${CLUSTER_NAMESPACE}<br />" +
+                  "USER: ${currentBuild.getBuildCauses()[0].userId}<br />" +
+                  "TIME TAKEN: ${currentBuild.duration} ms<br />"
+        )
+    }
+  }
+}
