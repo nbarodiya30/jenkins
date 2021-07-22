@@ -9,7 +9,7 @@ pipeline {
     APP_NAME = 'appname'
     DEPLOYMENT_NAME = 'deployment name'
     DOCKER_REPO_NAME = 'customer-service'
-    DEPLOYMENT_FILE = 'Dev/frute-deploy-rak-customer-dev.yaml'
+    DEPLOYMENT_FILE = 'Dev/yaml file'
     DOCKER_REPO_URL = 'ecr url'
     DOCKER_REPO_CREDENTIALS = 'ecr:ap-southeast-1:jenkins-user'
     DEPLOYMENT_FILES_DIRECTORY = "${WORKSPACE}/deployment_configs/"
@@ -59,8 +59,8 @@ pipeline {
                         | head -n 1)
                 fi
 
-                # Fetching correct current tag from ECR if "rakbank_release"
-                if echo "$CURRENT_TAG" | grep -q "rakbank_release"
+                # Fetching correct current tag from ECR if "tag_release"
+                if echo "$CURRENT_TAG" | grep -q "tag_release"
                     then
                         CURRENT_TAG=$(aws ecr describe-images \
                         --repository-name ${DOCKER_REPO_NAME} \
@@ -77,7 +77,7 @@ pipeline {
                 # Incrementing by 1
                 NEW_ID=$((ID+1))
 
-                # Computing NEW_TAG by appending NEW_ID to "rakbank-v1.2"
+                # Computing NEW_TAG by appending NEW_ID to "tag-v1.2"
                 NEW_TAG=${CURRENT_TAG%.*}.$NEW_ID
                 echo $NEW_TAG
               ''',
