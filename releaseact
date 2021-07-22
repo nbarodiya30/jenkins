@@ -18,6 +18,15 @@ git push origin :refs/tags/tagname_v1.14
 git tag -f tagname_v1.14
 git push origin tagname_v1.14
 
+git pull origin branchname
+git status
+modify file
+git status
+git add .
+git commit -m "message"
+git push origin branchname
+
+
 awslogin ecr
 docker pull url_name
 docker tag url_name newtag_url_name
