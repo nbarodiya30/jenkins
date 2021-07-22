@@ -110,7 +110,7 @@ pipeline {
       steps {
         echo "App name is ${APP_NAME}"
         git branch: env.GIT_BRANCH_NAME,
-          url: "git@bitbucket.org:bambudeveloper/${APP_NAME}.git",
+          url: "git@bitbucket.org:/${APP_NAME}.git",
           // GIT_CREDENTIALS is declared as a global environment variable in Jenkins
           credentialsId: env.GIT_CREDENTIALS
 
